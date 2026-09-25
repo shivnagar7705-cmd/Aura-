@@ -1,0 +1,6 @@
+{
+  "name": "Aura Music",
+  "description": "Aura Music streaming app and independent Aura Studio creator admin platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

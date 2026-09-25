@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Aura Music</string>
+    <string name="tagline">Feel Every Beat.</string>
+    <string name="google_app_id" translatable="false">1:811783560335:android:4be3e8bf4573061191a4fa</string>
+    <string name="gcm_defaultSenderId" translatable="false">811783560335</string>
+    <string name="default_web_client_id" translatable="false">811783560335-aura.apps.googleusercontent.com</string>
+    <string name="project_id" translatable="false">aura-music-b07a4</string>
+    <string name="google_storage_bucket" translatable="false">aura-music-b07a4.firebasestorage.app</string>
+    <string name="google_api_key" translatable="false">AIzaSyDNf1zVrwrAlddxEkgjZH7in8gMOi1IwOI</string>
+</resources>
