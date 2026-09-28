@@ -17,6 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MyApplication">
 
         <!-- Google AdMob Official Application ID (Change to your live AdMob App ID in production) -->

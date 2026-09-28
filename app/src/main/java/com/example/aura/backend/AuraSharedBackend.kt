@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.util.Log
 import com.example.aura.model.*
+import com.example.aura.veyora.*
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentChange
@@ -48,6 +49,14 @@ class AuraSharedBackend private constructor(private val context: Context) {
     private var firestore: FirebaseFirestore? = null
     private var songsListener: ListenerRegistration? = null
     private var bannersListener: ListenerRegistration? = null
+
+    // Veyora Cloud Backend Integration (Project: Test App 6)
+    private val veyoraClient = VeyoraCloudClient.getInstance()
+    private val _veyoraStatus = MutableStateFlow<VeyoraConnectionStatus>(VeyoraConnectionStatus.Idle)
+    val veyoraStatus: StateFlow<VeyoraConnectionStatus> = _veyoraStatus.asStateFlow()
+
+    private val _veyoraSongs = MutableStateFlow<List<Song>>(emptyList())
+    val veyoraSongs: StateFlow<List<Song>> = _veyoraSongs.asStateFlow()
 
     // Reactive StateFlows observed by both User App and Admin App
     private val _publishedSongs = MutableStateFlow<List<Song>>(emptyList())
@@ -96,15 +105,52 @@ class AuraSharedBackend private constructor(private val context: Context) {
                 restoreUserSession()
                 refreshData()
                 initFirebaseRealtimeSync()
+                // Connect to Veyora Cloud (Project: Test App 6)
+                syncWithVeyoraCloud()
             } catch (e: Exception) {
                 Log.e(TAG, "Initialization failed", e)
             }
         }
     }
 
+    suspend fun syncWithVeyoraCloud(): Result<Int> {
+        _veyoraStatus.value = VeyoraConnectionStatus.Connecting
+        val result = veyoraClient.fetchSongs()
+        return if (result.isSuccess) {
+            val (songs, endpoint) = result.getOrThrow()
+            _veyoraSongs.value = songs
+            refreshData()
+            _veyoraStatus.value = VeyoraConnectionStatus.Connected(
+                songCount = songs.size,
+                projectName = VeyoraConfig.PROJECT_NAME,
+                endpointUsed = endpoint
+            )
+            Log.d(TAG, "Veyora Cloud connected successfully: ${songs.size} songs loaded from $endpoint")
+            Result.success(songs.size)
+        } else {
+            val err = result.exceptionOrNull()?.message ?: "Unknown connection error"
+            val fallbackCount = queryAllSongs().count { it.status == SongStatus.PUBLISHED }
+            _veyoraStatus.value = VeyoraConnectionStatus.Fallback(
+                reason = err,
+                fallbackCatalogSize = fallbackCount
+            )
+            refreshData()
+            Log.w(TAG, "Veyora Cloud offline/fallback ($err). Active fallback songs: $fallbackCount")
+            Result.failure(result.exceptionOrNull() ?: Exception(err))
+        }
+    }
+
     fun refreshData() {
-        _allSongs.value = queryAllSongs()
-        _publishedSongs.value = _allSongs.value.filter { it.status == SongStatus.PUBLISHED }
+        val localSongs = queryAllSongs()
+        val veyoraList = _veyoraSongs.value
+        val combinedAll = if (veyoraList.isNotEmpty()) {
+            val veyoraIds = veyoraList.map { it.id }.toSet()
+            veyoraList + localSongs.filter { it.id !in veyoraIds }
+        } else {
+            localSongs
+        }
+        _allSongs.value = combinedAll
+        _publishedSongs.value = combinedAll.filter { it.status == SongStatus.PUBLISHED }
         _banners.value = queryBanners()
         _reports.value = queryReports()
     }
@@ -610,6 +656,15 @@ class AuraSharedBackend private constructor(private val context: Context) {
     fun recordPlay(songId: String, userId: String?) {
         scope.launch {
             val db = dbHelper.writableDatabase
+            val existsCur = db.rawQuery("SELECT id FROM songs WHERE id = ?", arrayOf(songId))
+            val exists = existsCur.moveToFirst()
+            existsCur.close()
+            if (!exists) {
+                val vSong = _veyoraSongs.value.find { it.id == songId }
+                if (vSong != null) {
+                    upsertSongLocal(vSong)
+                }
+            }
             db.execSQL("UPDATE songs SET plays_count = plays_count + 1 WHERE id = ?", arrayOf(songId))
             if (!userId.isNullOrEmpty()) {
                 val cv = ContentValues().apply {
@@ -629,6 +684,17 @@ class AuraSharedBackend private constructor(private val context: Context) {
 
     fun toggleLike(userId: String, songId: String): Boolean {
         val db = dbHelper.writableDatabase
+        // Ensure song exists in local sqlite cache if it was loaded from Veyora Cloud
+        val existsCur = db.rawQuery("SELECT id FROM songs WHERE id = ?", arrayOf(songId))
+        val exists = existsCur.moveToFirst()
+        existsCur.close()
+        if (!exists) {
+            val vSong = _veyoraSongs.value.find { it.id == songId }
+            if (vSong != null) {
+                upsertSongLocal(vSong)
+            }
+        }
+
         val cursor = db.query("likes", arrayOf("song_id"), "user_id = ? AND song_id = ?", arrayOf(userId, songId), null, null, null)
         val isLiked = cursor.moveToFirst()
         cursor.close()

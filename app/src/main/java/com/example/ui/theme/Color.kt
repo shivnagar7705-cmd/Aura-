@@ -19,6 +19,7 @@ val AuraPink = Color(0xFFF43F5E)                // Vivid rose neon accent
 val AuraAmber = Color(0xFFF59E0B)               // Warm core flare amber
 val AuraBlue = Color(0xFF38BDF8)                // Sky blue wave highlight
 val AuraGold = Color(0xFFFBBF24)                // Golden sparkle
+val AuraGreen = Color(0xFF10B981)               // Connected / success emerald
 
 // Full Replacement of Legacy Orange with Electric Violet & Neon Cyan (Orange 100% removed)
 val AuraOrange = AuraViolet                     // Replaced with Electric Violet

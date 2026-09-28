@@ -31,7 +31,10 @@ import com.example.aura.ads.AuraAdManager
 import com.example.aura.backend.AuraSharedBackend
 import com.example.aura.model.User
 import com.example.aura.player.AuraAudioPlayer
+import com.example.aura.veyora.VeyoraConfig
+import com.example.aura.veyora.VeyoraConnectionStatus
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +49,9 @@ fun SettingsScreen(
     onAccountDeleted: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val veyoraStatus by backend.veyoraStatus.collectAsState()
+    var isTestingVeyora by remember { mutableStateOf(false) }
 
     // Notification Toggles
     var notifNewReleases by remember { mutableStateOf(true) }
@@ -136,6 +142,92 @@ fun SettingsScreen(
                             onClick = { showDeleteAccountDialog = true },
                             titleColor = Color(0xFFFF4D6D)
                         )
+                    }
+                }
+            }
+
+            // =========================
+            // VEYORA CLOUD BACKEND (Test App 6)
+            // =========================
+            item {
+                SettingsSectionHeader(title = "VEYORA CLOUD BACKEND")
+            }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AuraSurface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, AuraCyan.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(AuraCyan.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.CloudQueue, contentDescription = null, tint = AuraCyan, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Veyora Cloud Project", color = AuraTextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Project: ${VeyoraConfig.PROJECT_NAME}", color = AuraCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Project ID: ${VeyoraConfig.getProjectId()}",
+                            color = AuraTextSecondary,
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val (statusText, statusColor) = when (val s = veyoraStatus) {
+                            is VeyoraConnectionStatus.Connected -> Pair("● Connected (${s.songCount} songs synced from cloud)", AuraGreen)
+                            is VeyoraConnectionStatus.Connecting -> Pair("● Connecting to Veyora Cloud...", AuraCyan)
+                            is VeyoraConnectionStatus.Fallback -> Pair("● Fallback Active (${s.fallbackCatalogSize} songs ready)", AuraAmber)
+                            is VeyoraConnectionStatus.Idle -> Pair("● Ready", AuraTextSecondary)
+                        }
+
+                        Text(
+                            text = statusText,
+                            color = statusColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Button(
+                            onClick = {
+                                isTestingVeyora = true
+                                coroutineScope.launch {
+                                    val result = backend.syncWithVeyoraCloud()
+                                    isTestingVeyora = false
+                                    result.onSuccess { count ->
+                                        Toast.makeText(context, "Veyora Cloud Connected! $count songs loaded.", Toast.LENGTH_LONG).show()
+                                    }.onFailure { err ->
+                                        Toast.makeText(context, "Veyora Cloud notice: ${err.message}. Local catalog active.", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AuraCyan, contentColor = Color.Black),
+                            enabled = !isTestingVeyora
+                        ) {
+                            if (isTestingVeyora) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Test Connection & Sync Catalog", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
                     }
                 }
             }
