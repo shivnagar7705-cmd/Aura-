@@ -52,6 +52,9 @@ fun SettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val veyoraStatus by backend.veyoraStatus.collectAsState()
     var isTestingVeyora by remember { mutableStateOf(false) }
+    var showVeyoraConfigDialog by remember { mutableStateOf(false) }
+    var configProjectId by remember { mutableStateOf(VeyoraConfig.getProjectId(context)) }
+    var configApiKey by remember { mutableStateOf(VeyoraConfig.getApiKey(context)) }
 
     // Notification Toggles
     var notifNewReleases by remember { mutableStateOf(true) }
@@ -179,8 +182,20 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Project ID: ${VeyoraConfig.getProjectId()}",
+                            text = "Project ID: ${VeyoraConfig.getProjectId(context)}",
                             color = AuraTextSecondary,
+                            fontSize = 11.sp
+                        )
+
+                        val currentKey = VeyoraConfig.getApiKey(context)
+                        val keyDisplay = if (currentKey.isNotBlank()) {
+                            if (currentKey.length > 10) "Key: ${currentKey.take(6)}...${currentKey.takeLast(4)}" else "Key: Configured"
+                        } else {
+                            "Key: Not configured (Local fallback active)"
+                        }
+                        Text(
+                            text = keyDisplay,
+                            color = AuraTextMuted,
                             fontSize = 11.sp
                         )
 
@@ -202,30 +217,48 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Button(
-                            onClick = {
-                                isTestingVeyora = true
-                                coroutineScope.launch {
-                                    val result = backend.syncWithVeyoraCloud()
-                                    isTestingVeyora = false
-                                    result.onSuccess { count ->
-                                        Toast.makeText(context, "Veyora Cloud Connected! $count songs loaded.", Toast.LENGTH_LONG).show()
-                                    }.onFailure { err ->
-                                        Toast.makeText(context, "Veyora Cloud notice: ${err.message}. Local catalog active.", Toast.LENGTH_LONG).show()
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    configProjectId = VeyoraConfig.getProjectId(context)
+                                    configApiKey = VeyoraConfig.getApiKey(context)
+                                    showVeyoraConfigDialog = true
+                                },
+                                modifier = Modifier.weight(1f).height(42.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, AuraCardBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AuraCyan)
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Credentials", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    isTestingVeyora = true
+                                    coroutineScope.launch {
+                                        val result = backend.syncWithVeyoraCloud()
+                                        isTestingVeyora = false
+                                        result.onSuccess { count ->
+                                            Toast.makeText(context, "Veyora Cloud Connected! $count songs loaded.", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Veyora sync notice: ${err.message}. Local catalog active.", Toast.LENGTH_LONG).show()
+                                        }
                                     }
+                                },
+                                modifier = Modifier.weight(1.2f).height(42.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AuraCyan, contentColor = Color.Black),
+                                enabled = !isTestingVeyora
+                            ) {
+                                if (isTestingVeyora) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(42.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = AuraCyan, contentColor = Color.Black),
-                            enabled = !isTestingVeyora
-                        ) {
-                            if (isTestingVeyora) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Test Connection & Sync Catalog", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }
@@ -643,6 +676,95 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showAdMobConfigDialog = false }) {
+                    Text("Close", color = AuraTextMuted)
+                }
+            },
+            containerColor = AuraSurfaceVariant
+        )
+    }
+
+    if (showVeyoraConfigDialog) {
+        AlertDialog(
+            onDismissRequest = { showVeyoraConfigDialog = false },
+            title = {
+                Text("Veyora Cloud Credentials", color = AuraTextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Veyora Cloud requires the project's 'vk_...' API key to authenticate song catalog sync. When credentials are not set, Aura Music plays from the local/Firebase catalog seamlessly.",
+                        color = AuraTextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = configProjectId,
+                        onValueChange = { configProjectId = it },
+                        label = { Text("Project ID", fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AuraCyan,
+                            unfocusedBorderColor = AuraCardBorder,
+                            focusedTextColor = AuraTextPrimary,
+                            unfocusedTextColor = AuraTextPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = configApiKey,
+                        onValueChange = { configApiKey = it },
+                        label = { Text("Project API Key (vk_...)", fontSize = 12.sp) },
+                        placeholder = { Text("vk_...", color = AuraTextMuted) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AuraCyan,
+                            unfocusedBorderColor = AuraCardBorder,
+                            focusedTextColor = AuraTextPrimary,
+                            unfocusedTextColor = AuraTextPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            configProjectId = VeyoraConfig.DEMO_PROJECT_ID
+                            configApiKey = VeyoraConfig.DEMO_API_KEY
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, AuraCyan.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AuraCyan)
+                    ) {
+                        Icon(Icons.Default.CloudDone, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Fill Live Demo Project (Verified)", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        VeyoraConfig.setCredentials(context, configProjectId, configApiKey)
+                        showVeyoraConfigDialog = false
+                        coroutineScope.launch {
+                            backend.syncWithVeyoraCloud()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AuraCyan, contentColor = Color.Black)
+                ) {
+                    Text("Save & Sync", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVeyoraConfigDialog = false }) {
                     Text("Close", color = AuraTextMuted)
                 }
             },

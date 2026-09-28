@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.aura.model.SongStatus
 import com.example.aura.veyora.VeyoraConfig
 import com.example.aura.veyora.VeyoraSongParser
 import org.junit.Assert.*
@@ -12,31 +13,32 @@ class VeyoraIntegrationTest {
         assertEquals("c023f1e9-3baa-468a-9a92-4343182d94fb", VeyoraConfig.DEFAULT_PROJECT_ID)
         assertEquals("Test App 6", VeyoraConfig.PROJECT_NAME)
         assertEquals("c023f1e9-3baa-468a-9a92-4343182d94fb", VeyoraConfig.getProjectId())
-        assertTrue(VeyoraConfig.getBaseUrl().contains("c023f1e9-3baa-468a-9a92-4343182d94fb"))
+        assertTrue(VeyoraConfig.getBaseUrl().contains("veyora-cloud.onrender.com"))
     }
 
     @Test
-    fun veyoraSongParser_parsesPostgrestJsonArrayCorrectly() {
+    fun veyoraSongParser_parsesRealVeyoraCloudJsonCorrectly() {
         val sampleJson = """
             [
               {
-                "id": "veyora_track_1",
-                "title": "Quantum Echoes",
-                "artist": "Nova Pulse",
-                "album": "Celestial Drift",
-                "genre": "Synthwave",
-                "audio_url": "https://cdn.veyora.cloud/audio/quantum_echoes.mp3",
-                "cover_url": "https://cdn.veyora.cloud/images/quantum_echoes.jpg",
-                "duration_ms": 215000,
-                "status": "PUBLISHED"
+                "id": "4ecc6046-e649-45fa-b7ef-7bc3a73923a0",
+                "created_at": "2026-09-28T13:31:18.038343+00:00",
+                "project_id": "c023f1e9-3baa-468a-9a92-4343182d94fb",
+                "title": "Midnight Reverie",
+                "artist": "Aura Echo",
+                "audio_url": "https://veyora-cloud.onrender.com/uploads/c023f1e9/midnight.mp3",
+                "cover_url": "https://veyora-cloud.onrender.com/uploads/c023f1e9/midnight_cover.jpg",
+                "status": "published"
               },
               {
-                "id": "veyora_track_2",
-                "name": "Astral Breeze",
-                "artist_name": "Lyra V",
-                "file_url": "https://cdn.veyora.cloud/audio/astral_breeze.wav",
-                "image_url": "https://cdn.veyora.cloud/images/astral_breeze.png",
-                "duration": 190
+                "id": "7bdd3125-d721-42cb-98da-8cc4e82012c4",
+                "created_at": "2026-09-27T10:15:00.000000+00:00",
+                "project_id": "c023f1e9-3baa-468a-9a92-4343182d94fb",
+                "title": "Solar Flares",
+                "artist": "Nova Pulse",
+                "audio_url": "https://veyora-cloud.onrender.com/uploads/c023f1e9/solar.mp3",
+                "cover_url": "https://veyora-cloud.onrender.com/uploads/c023f1e9/solar.png",
+                "status": "published"
               }
             ]
         """.trimIndent()
@@ -45,22 +47,22 @@ class VeyoraIntegrationTest {
         assertEquals(2, songs.size)
 
         val first = songs[0]
-        assertEquals("veyora_track_1", first.id)
-        assertEquals("Quantum Echoes", first.title)
-        assertEquals("Nova Pulse", first.artist)
-        assertEquals("Celestial Drift", first.album)
-        assertEquals("Synthwave", first.genre)
-        assertEquals("https://cdn.veyora.cloud/audio/quantum_echoes.mp3", first.audioUrl)
-        assertEquals("https://cdn.veyora.cloud/images/quantum_echoes.jpg", first.coverUrl)
-        assertEquals(215000L, first.durationMs)
+        assertEquals("4ecc6046-e649-45fa-b7ef-7bc3a73923a0", first.id)
+        assertEquals("Midnight Reverie", first.title)
+        assertEquals("Aura Echo", first.artist)
+        assertEquals("https://veyora-cloud.onrender.com/uploads/c023f1e9/midnight.mp3", first.audioUrl)
+        assertEquals("https://veyora-cloud.onrender.com/uploads/c023f1e9/midnight_cover.jpg", first.coverUrl)
+        assertEquals(SongStatus.PUBLISHED, first.status)
+        assertTrue(first.durationMs > 0)
+        assertTrue(first.createdAt > 0)
 
         val second = songs[1]
-        assertEquals("veyora_track_2", second.id)
-        assertEquals("Astral Breeze", second.title)
-        assertEquals("Lyra V", second.artist)
-        assertEquals("https://cdn.veyora.cloud/audio/astral_breeze.wav", second.audioUrl)
-        assertEquals("https://cdn.veyora.cloud/images/astral_breeze.png", second.coverUrl)
-        assertEquals(190000L, second.durationMs) // converted seconds to ms
+        assertEquals("7bdd3125-d721-42cb-98da-8cc4e82012c4", second.id)
+        assertEquals("Solar Flares", second.title)
+        assertEquals("Nova Pulse", second.artist)
+        assertEquals("https://veyora-cloud.onrender.com/uploads/c023f1e9/solar.mp3", second.audioUrl)
+        assertEquals("https://veyora-cloud.onrender.com/uploads/c023f1e9/solar.png", second.coverUrl)
+        assertEquals(SongStatus.PUBLISHED, second.status)
     }
 
     @Test
@@ -77,5 +79,11 @@ class VeyoraIntegrationTest {
 
         val songs = VeyoraSongParser.parseSongList(json)
         assertEquals(0, songs.size)
+    }
+
+    @Test
+    fun veyoraConfig_demoCredentialsAreValid() {
+        assertEquals("c74ba593-c43e-4c7a-b7af-b191a6038876", VeyoraConfig.DEMO_PROJECT_ID)
+        assertEquals("vk_a72cbfe5c912f4d273d0f2c4cf989c5e0fd4", VeyoraConfig.DEMO_API_KEY)
     }
 }

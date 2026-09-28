@@ -1,16 +1,21 @@
 package com.example.aura.veyora
 
+import android.util.Log
 import com.example.aura.model.Song
 import com.example.aura.model.SongStatus
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 object VeyoraSongParser {
 
+    private const val TAG = "VeyoraSongParser"
+
     /**
-     * Parses a raw JSON response (either JSONArray or JSONObject with data array)
-     * into a list of domain [Song] instances.
+     * Parses a raw JSON response (either JSONArray or JSONObject containing songs array)
+     * from Veyora Cloud into a list of domain [Song] instances.
      */
     fun parseSongList(jsonString: String): List<Song> {
         val trimmed = jsonString.trim()
@@ -25,24 +30,26 @@ object VeyoraSongParser {
                 }
             } else if (trimmed.startsWith("{")) {
                 val root = JSONObject(trimmed)
-                val array = root.optJSONArray("data")
-                    ?: root.optJSONArray("songs")
+                val array = root.optJSONArray("songs")
+                    ?: root.optJSONArray("data")
                     ?: root.optJSONArray("tracks")
-                    ?: root.optJSONArray("results")
                     ?: root.optJSONArray("items")
+                    ?: root.optJSONArray("results")
 
                 if (array != null) {
                     for (i in 0 until array.length()) {
                         val item = array.optJSONObject(i) ?: continue
                         parseSong(item, i)?.let { songs.add(it) }
                     }
-                } else {
-                    // Maybe the single object is a song
+                } else if (root.has("song") && root.optJSONObject("song") != null) {
+                    parseSong(root.getJSONObject("song"), 0)?.let { songs.add(it) }
+                } else if (root.has("title") || root.has("audio_url") || root.has("audioUrl")) {
+                    // Single song object
                     parseSong(root, 0)?.let { songs.add(it) }
                 }
             }
-        } catch (_: Exception) {
-            // Return whatever parsed so far
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing Veyora Cloud JSON: ${e.message}", e)
         }
 
         return songs
@@ -72,29 +79,27 @@ object VeyoraSongParser {
         }
 
         val album = obj.optString("album").ifBlank {
-            obj.optString("album_name").ifBlank { "Veyora Cloud" }
+            obj.optString("album_name").ifBlank { "Single" }
         }
 
         val genre = obj.optString("genre").ifBlank {
             obj.optString("category").ifBlank { "Electronic" }
         }
 
+        // Real Veyora Cloud DB field is "audio_url" (or camelCase "audioUrl")
         val rawAudio = obj.optString("audio_url").ifBlank {
             obj.optString("audioUrl").ifBlank {
                 obj.optString("url").ifBlank {
                     obj.optString("file_url").ifBlank {
                         obj.optString("media_url").ifBlank {
-                            obj.optString("stream_url").ifBlank {
-                                obj.optString("playback_url").ifBlank {
-                                    obj.optString("song_url").ifBlank { "" }
-                                }
-                            }
+                            obj.optString("stream_url").ifBlank { "" }
                         }
                     }
                 }
             }
         }
 
+        // Real Veyora Cloud DB field is "cover_url" (or camelCase "coverUrl")
         val rawCover = obj.optString("cover_url").ifBlank {
             obj.optString("coverUrl").ifBlank {
                 obj.optString("image_url").ifBlank {
@@ -124,7 +129,10 @@ object VeyoraSongParser {
         }
 
         // Songs without playable audio cannot be streamed
-        if (normalizedAudio.isBlank()) return null
+        if (normalizedAudio.isBlank()) {
+            Log.w(TAG, "Skipping song '$title' because audio_url is empty")
+            return null
+        }
 
         val rawDuration = obj.optLong("duration_ms", 0L).let {
             if (it > 0) it else obj.optLong("duration", 0L)
@@ -132,7 +140,7 @@ object VeyoraSongParser {
         val durationMs = when {
             rawDuration in 1..999 -> rawDuration * 1000
             rawDuration > 0 -> rawDuration
-            else -> 180000L
+            else -> 210000L // Default duration: 3 mins 30 secs
         }
 
         val lyrics = obj.optString("lyrics").takeIf { it.isNotBlank() }
@@ -144,6 +152,17 @@ object VeyoraSongParser {
             statusStr == "DRAFT" -> SongStatus.DRAFT
             statusStr == "UNPUBLISHED" -> SongStatus.UNPUBLISHED
             else -> SongStatus.PUBLISHED
+        }
+
+        val createdAtEpoch = try {
+            val rawCreated = obj.optString("created_at")
+            if (rawCreated.isNotBlank()) {
+                Instant.parse(rawCreated).toEpochMilli()
+            } else {
+                System.currentTimeMillis()
+            }
+        } catch (_: Exception) {
+            obj.optLong("created_at", System.currentTimeMillis())
         }
 
         return Song(
@@ -169,8 +188,8 @@ object VeyoraSongParser {
             isTrending = obj.optBoolean("is_trending", true),
             isNewRelease = obj.optBoolean("is_new_release", true),
             isRecommended = obj.optBoolean("is_recommended", true),
-            createdAt = obj.optLong("created_at", System.currentTimeMillis()),
-            updatedAt = obj.optLong("updated_at", System.currentTimeMillis())
+            createdAt = createdAtEpoch,
+            updatedAt = System.currentTimeMillis()
         )
     }
 }

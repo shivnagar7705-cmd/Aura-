@@ -108,14 +108,14 @@ class AuraSharedBackend private constructor(private val context: Context) {
                 // Connect to Veyora Cloud (Project: Test App 6)
                 syncWithVeyoraCloud()
             } catch (e: Exception) {
-                Log.e(TAG, "Initialization failed", e)
+                Log.w(TAG, "Initialization notice: ${e.message}")
             }
         }
     }
 
     suspend fun syncWithVeyoraCloud(): Result<Int> {
         _veyoraStatus.value = VeyoraConnectionStatus.Connecting
-        val result = veyoraClient.fetchSongs()
+        val result = veyoraClient.fetchSongs(context)
         return if (result.isSuccess) {
             val (songs, endpoint) = result.getOrThrow()
             _veyoraSongs.value = songs
@@ -125,17 +125,17 @@ class AuraSharedBackend private constructor(private val context: Context) {
                 projectName = VeyoraConfig.PROJECT_NAME,
                 endpointUsed = endpoint
             )
-            Log.d(TAG, "Veyora Cloud connected successfully: ${songs.size} songs loaded from $endpoint")
+            Log.i(TAG, "Veyora Cloud connected successfully: ${songs.size} songs loaded from $endpoint")
             Result.success(songs.size)
         } else {
-            val err = result.exceptionOrNull()?.message ?: "Unknown connection error"
+            val err = result.exceptionOrNull()?.message ?: "Veyora Cloud sync unavailable"
             val fallbackCount = queryAllSongs().count { it.status == SongStatus.PUBLISHED }
             _veyoraStatus.value = VeyoraConnectionStatus.Fallback(
                 reason = err,
                 fallbackCatalogSize = fallbackCount
             )
             refreshData()
-            Log.w(TAG, "Veyora Cloud offline/fallback ($err). Active fallback songs: $fallbackCount")
+            Log.i(TAG, "Veyora Cloud status: fallback catalog active ($fallbackCount songs ready). Notice: $err")
             Result.failure(result.exceptionOrNull() ?: Exception(err))
         }
     }
